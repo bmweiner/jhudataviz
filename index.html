@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Housing Data Prices</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/datatables.min.css"/>
+    <link rel="stylesheet" href="css/style.css">
+
+</head>
+
+<body>
+    <div class="container">
+        <h1 class="text-center p-2">US Housing Price Index</h1>
+
+        <div class="row">
+            <div class="btn-group col-6 mx-auto pb-4">
+                <button id="btn-minus" type="button" class="btn btn-outline-danger">Last Quarter</button>
+                <button id="btn-qt" class="btn btn-secondary btn-lg dropdown-toggle w-50" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                </button>
+                <div id="list-dt" class="dropdown-menu"></div>
+                <button id="btn-plus" type="button" class="btn btn-outline-success">Next Quarter</button>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-sm-4">
+              <div class="card text-center">
+                <div class="card-body">
+                  <h5 id="low-card" class="card-title">-</h5>
+                  <p class="card-text">Lowest $</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-sm-4">
+              <div class="card text-center">
+                <div class="card-body">
+                  <h5 id="med-card" class="card-title">-</h5>
+                  <p class="card-text">Average $</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-sm-4">
+                <div class="card text-center">
+                  <div class="card-body">
+                    <h5 id="high-card" class="card-title">-</h5>
+                    <p class="card-text">Highest $</p>
+                  </div>
+                </div>
+              </div>            
+          </div>
+
+        <div class="row">
+            <div id="map"></div>
+            <div id="legend" class="d-flex justify-content-center"></div>
+        </div>
+        <div class="row">
+            <table id="table" class="display" width="100%"></table>
+        </div>
+        <div class="row p-3">
+            <h4>Data Sources</h4>
+            <ul class="list-group">
+                <li class="list-group-item">
+                    <a href="https://fred.stlouisfed.org/series/VASTHPI">
+                        FRED All-Transactions House Price Index
+                    </a>
+                    based on change from 1980 Q1 of 100, not seasonally 
+                    adjusted.
+                  </li>
+                  <li class="list-group-item">
+                    <a href="https://fred.stlouisfed.org/series/JOBLOSVA">
+                        FRED Unemployed: Job Losers
+                    </a>
+                    represents the number of persons losing their job, 
+                    4-quarter moving average and not seasonally adjusted.
+                  </li>
+              </ul>
+        </div>
+    </div>
+
+    <!-- load deps -->
+    <script src = "/js/jquery-3.3.1.slim.min.js"></script>
+    <script src = "js/popper.min.js"></script>
+    <script src = "js/bootstrap.min.js"></script>
+    <script src="js/datatables.min.js"></script>
+    <script src = "js/d3.min.js"></script>
+    <script src = "js/topojson.js"></script>
+
+    <!-- reference: http://bl.ocks.org/michellechandra/0b2ce4923dc9b5809922 -->
+    <!-- reference: https://bl.ocks.org/duspviz-mit/9b6dce37101c30ab80d0bf378fe5e583 -->
+    <script>
+        function quarterToInt(dt){
+                return parseInt(dt.substring(0,4) + dt.substring(6,7));
+            }
+
+        function quarterToStr(dt){
+            let s = dt.toString();
+            return s.substring(0,4) + " Q" + s.substring(4,5) 
+        } 
+
+        $(document).ready(function(){
+            let valid_quarters = [];
+            let min_dt;
+            let max_dt;
+
+            // create map
+            d3.json("/data/us.json").then(us => {
+
+                const width = 450;
+                const height = 300;
+                let w = 300
+                let h = 50;
+                const colorStart = '#CACAD0';
+                const colorStop = '#2c74b1';
+
+                let g = d3.select('#map')
+                    .append('svg')
+                    .attr('viewBox', '0 0 ' + width + ' ' + height)
+                    .attr('preserveAspectRatio', 'xMinYMin meet')
+                    .append('g')
+                    .attr('class', 'states');
+
+
+                let projection = d3.geoAlbersUsa()
+                    .scale(600)
+                    .translate([width / 2, height / 2]);
+
+                let path = d3.geoPath()
+                    .projection(projection);
+
+                let heatmap = d3.scaleLinear()
+                    .interpolate(d3.interpolateRgb)
+                    .range([colorStart, colorStop]);
+
+                let states = g.selectAll('path')
+                    .data(topojson.feature(us, us.objects.states).features)
+                    .enter()
+                    .append('path')
+                    .attr('d', path)
+                    .attr('id', function(d) {
+                        return d.properties.NAME;
+                    })
+                    .style('fill', function(d) {
+                        return "rgb(241, 223, 216)"
+                        return heatmap(0);
+                });
+
+                g.append('path')
+                    .datum(topojson.mesh(us, us.objects.states, function(a, b) {
+                        return a !== b;
+                    }))                  
+                    .attr('class', 'state-border')
+                    .attr('d', path);
+                
+                // load price and jobs data to map and table
+                d3.json("data/prices_jobs.json").then(data =>{
+                    valid_quarters = Object.keys(data);
+
+                    s_quarters = valid_quarters.map(dt => quarterToInt(dt));
+
+                    min_dt = d3.min(s_quarters);
+                    max_dt = d3.max(s_quarters);
+
+                    // set default quarter
+                    $("#btn-qt").text(quarterToStr(min_dt));
+
+                    // set dropdown quarters
+                    let html =  ``
+                    valid_quarters.forEach((val, idx) => {
+                        html += `<a class="dropdown-item" href="#">` + val + `</a>`
+                    })
+                    $("#list-dt").html(html)
+
+                    /**
+                     * refresh data for selected quarter.
+                     * @param {Year Quarter} dt - Year and Quarter, e.g. 2010 Q1
+                     */
+                    function refresh(dt) {
+                        let keys = Object.keys(data[dt])
+                        let table_data = []
+                        let vals = []
+                        keys.forEach((val, idx) => {
+                            let arr = [val]
+                            table_data.push(arr.concat(data[dt][val]))
+                            vals.push(data[dt][val][0]) // price
+                        })
+
+                        // min
+                        let minState = keys[d3.minIndex(vals)]
+                        let min = d3.min(vals);
+
+                        // max
+                        let maxState = keys[d3.maxIndex(vals)]
+                        let max = d3.max(vals);
+
+                        // median
+                        let avgState = keys[vals.indexOf(d3.median(vals))]
+
+                        // update cards
+                        $("#low-card").text(minState);
+                        $("#med-card").text(avgState);
+                        $("#high-card").text(maxState);                        
+
+                        // update map
+                        heatmap.domain([min, max]);
+
+                        states.style('fill', function(d) {
+                            if (d.properties.NAME in data[dt]){
+                                let val = data[dt][d.properties.NAME][0]
+                                return heatmap(val || 0);
+                            }
+                        })
+
+                        // update table
+                        if ( $.fn.dataTable.isDataTable( '#table' ) ) {
+                            $('#table').DataTable().destroy();
+                        }
+
+                        $('#table').DataTable( {
+                            data: table_data,
+                            columns: [
+                                { title: "State" },
+                                { 
+                                    title: "House Price Index",
+                                    render: $.fn.dataTable.render.number( ',', '.', 2)
+                                },
+                                { 
+                                    title: "Job Losers",
+                                    render: $.fn.dataTable.render.number( ',', '.')
+                                }
+                            ]
+                        });
+
+                        // add legend
+                        d3.select("#legend").html("");
+
+                        var key = d3.select("#legend")
+                        .append("svg")
+                        .attr("width", w)
+                        .attr("height", h);
+
+                        var legend = key.append("defs")
+                        .append("svg:linearGradient")
+                        .attr("id", "gradient")
+                        .attr("x1", "0%")
+                        .attr("y1", "100%")
+                        .attr("x2", "100%")
+                        .attr("y2", "100%")
+                        .attr("spreadMethod", "pad");
+
+                        legend.append("stop")
+                        .attr("offset", "0%")
+                        .attr("stop-color", colorStart)
+                        .attr("stop-opacity", 1);
+
+                        legend.append("stop")
+                        .attr("offset", "100%")
+                        .attr("stop-color", colorStop)
+                        .attr("stop-opacity", 1);
+
+                        key.append("rect")
+                        .attr("width", w)
+                        .attr("height", h - 30)
+                        .style("fill", "url(#gradient)")
+                        .attr("transform", "translate(0,10)");
+
+                        var y = d3.scaleLinear()
+                        .range([w, 0])
+                        .domain([max, min]);
+
+                        var yAxis = d3.axisBottom()
+                        .scale(y)
+                        .ticks(5);
+
+                        key.append("g")
+                        .attr("class", "y axis")
+                        .attr("transform", "translate(0,30)")
+                        .call(yAxis)
+                        .append("text")
+                        .attr("transform", "rotate(-90)")
+                        .attr("y", 0)
+                        .attr("dy", ".71em")
+                        .style("text-anchor", "end")
+                        .text("axis title");
+
+                    }
+
+                    // set callbacks
+
+                    // trigger on quarter change
+                    function update_btn_txt(qt){
+                        $("#btn-qt").text(qt);
+                        refresh(qt)
+                    }
+
+                    // set quarter select behavior
+                    $('#list-dt .dropdown-item').click(function() {
+                        let selected_qt = $(this).text()
+                        update_btn_txt(selected_qt);
+                    })
+
+                    // set quarter minus behavior
+                    $("#btn-minus").click(function() {
+                        let current_qt = quarterToInt($("#btn-qt").text());
+                        if (min_dt < current_qt){
+                            let new_quarter;
+                            if (current_qt % 10 == 1){
+                                new_quarter = current_qt - 7
+                            } else {
+                                new_quarter = current_qt - 1
+                            }
+                            update_btn_txt(quarterToStr(new_quarter));
+                        } else {
+                            alert("No data available before " + quarterToStr(current_qt));
+                        }
+                    })
+
+                    // set quarter plus behavior
+                    $("#btn-plus").click(function() {
+                        let current_qt = quarterToInt($("#btn-qt").text());
+                        if (max_dt > current_qt){
+                            let new_quarter;
+                            if (current_qt % 10 == 4){
+                                new_quarter = current_qt + 7
+                            } else {
+                                new_quarter = current_qt + 1
+                            }
+                            update_btn_txt(quarterToStr(new_quarter));
+                        } else {
+                            alert("No data available after " + quarterToStr(current_qt));
+                        }
+                    })
+
+                    // init
+                    refresh(quarterToStr(min_dt))
+
+                }).catch(error => alert(error.message)); // data
+            }).catch(error => alert(error.message)); // states
+        });
+
+    </script>
+    
+</body>
+</html>
