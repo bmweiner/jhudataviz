@@ -33,3 +33,7 @@ To open the Jupyter notebook, activate the Conda Virtual Environment and
 then open jupyter notebook with:
 
     jupyter notebook
+
+## Site
+
+[https://bmweiner.github.io/jhudataviz](https://bmweiner.github.io/jhudataviz)
