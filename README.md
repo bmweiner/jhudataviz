@@ -34,6 +34,17 @@ then open jupyter notebook with:
 
     jupyter notebook
 
-## Site
+## Published Site
 
+The housing price data site can be found at:
 [https://bmweiner.github.io/jhudataviz](https://bmweiner.github.io/jhudataviz)
+
+
+## Local Source Code
+
+To run this source code locally, navigate to the `src` directory and run:
+
+    python -m http.server
+
+The site will be accessible at: [http://localhost:8000](http://localhost:8000)
+
